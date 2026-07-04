@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>巴士到站</title>
+<style>
+  html { zoom: 1.2; }
+  :root {
+    --bg: #000; --card: rgba(28,28,30,0.82); --separator: rgba(84,84,88,0.42);
+    --label: #fff; --secondary: rgba(235,235,245,0.6); --tertiary: rgba(235,235,245,0.3);
+    --red: #ff453a; --yellow: #ffd60a; --green: #30d158;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--label);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro TC", "PingFang HK", sans-serif;
+    display: flex; flex-direction: column; padding: 3.4vh 4.5vw 2.2vh; overflow: hidden;
+  }
+  header { display: flex; align-items: baseline; justify-content: space-between; padding: 0 0.4vw 1.6vh; }
+  h1 { font-size: clamp(25px, 4.4vw, 45px); font-weight: 700; letter-spacing: -0.022em; }
+  .clock { font-size: clamp(32px, 5.4vw, 54px); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--secondary); }
+  .card { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--card);
+    -webkit-backdrop-filter: blur(30px); backdrop-filter: blur(30px); border-radius: clamp(16px, 2.4vw, 26px); padding: 0.4vh 0; }
+  .row { display: grid; grid-template-columns: minmax(4.6em, auto) 1fr auto; gap: 3vw; align-items: center; padding: 1.35vh 4.2vw; position: relative; }
+  .row + .row::before { content: ""; position: absolute; top: 0; left: 4.2vw; right: 0; height: 0.5px; background: var(--separator); }
+  .row.soon { background: #e5e5ea; }
+  .row.soon .dest { color: #1c1c1e; }
+  .row.soon .sub { color: rgba(60,60,67,0.72); }
+  .row.soon .at { color: rgba(60,60,67,0.5); }
+  .row.soon .unit { color: rgba(60,60,67,0.72); }
+  .row.soon .min { color: #1c1c1e; }
+  .row.soon .min.now { color: #1d7a35; }
+  .row.soon .rmk { color: #a05a00; }
+  .pill { justify-self: start; font-size: clamp(19px, 3vw, 33px); font-weight: 700; padding: 0.14em 0.5em;
+    border-radius: 0.42em; min-width: 2.5em; text-align: center; font-variant-numeric: tabular-nums; }
+  .pill.kmb { background: var(--red); color: #fff; }
+  .pill.ctb { background: var(--yellow); color: #1c1400; }
+  .pill.gmb { background: var(--green); color: #003217; }
+  .dest { font-size: clamp(18px, 2.8vw, 31px); font-weight: 600; letter-spacing: -0.016em; line-height: 1.28; }
+  .sub { font-size: clamp(13px, 1.55vw, 18px); color: var(--secondary); margin-top: 0.2em; }
+  .rmk { color: var(--yellow); }
+  .when { text-align: right; white-space: nowrap; }
+  .min { font-size: clamp(24px, 4vw, 43px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .min.now { color: var(--green); font-size: clamp(18px, 2.6vw, 29px); }
+  .unit { font-size: clamp(13px, 1.7vw, 19px); font-weight: 500; color: var(--secondary); margin-left: 0.3em; }
+  .at { font-size: clamp(13px, 1.55vw, 18px); color: var(--tertiary); margin-top: 0.15em; font-variant-numeric: tabular-nums; }
+  .empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--secondary); font-size: clamp(17px, 2.4vw, 25px); text-align: center; line-height: 1.9; }
+  footer { display: flex; justify-content: space-between; align-items: center; padding: 1.4vh 0.6vw 0;
+    font-size: clamp(12px, 1.35vw, 16px); color: var(--tertiary); font-weight: 500; }
+  .dot { display: inline-block; width: 0.55em; height: 0.55em; border-radius: 50%; margin: 0 0.45em 0 1.1em; }
+  #stale { color: var(--red); display: none; font-weight: 600; }
+</style>
+</head>
+<body>
+<header><h1 id="title">巴士到站</h1><div class="clock" id="clock">--:--:--</div></header>
+<div class="card"><div id="rows" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"><div class="empty">載入中…</div></div></div>
+<footer>
+  <span id="updated"></span><span id="stale">未能更新</span>
+  <span><span class="dot" style="background:var(--red)"></span>九巴<span class="dot" style="background:var(--yellow)"></span>城巴<span class="dot" style="background:var(--green)"></span>專線小巴</span>
+</footer>
+<script>
+// ============ 設定（改呢度就得）============
+var CONFIG = {
+  title: '欣翠花園 巴士到站',
+  refreshSeconds: 20,
+  maxMinutesAhead: 60,
+  maxPerRoute: 2,
+  maxRows: 9,
+  routeFilter: [],
+  excludeRoutes: ['A43', '978'],
+  nightStart: '23:00',
+  nightEnd: '06:30',
+  stops: [
+    { operator: 'kmb', id: '98EBAB9468C80DD2', label: '欣翠花園（往市區）' },
+    { operator: 'kmb', id: 'CCDD774F50E8650C', label: '欣翠花園（高鐵巴士）' },
+    { operator: 'kmb', id: '9B0A34A1BF585BC4', label: '欣翠花園（往聯和墟）' },
+    { operator: 'kmb', id: 'D6ACD5E94F9E6DED', routes: ['A43'], label: '華慧園（往機場・A43）' },
+    { operator: 'ctb', id: '003379', routes: ['678'], label: '欣翠花園（城巴678）' }
+  ]
+};
+// ==========================================
+
+var KMB = 'https://data.etabus.gov.hk/v1/transport/kmb';
+var CTB = 'https://rt.data.gov.hk/v2/transport/citybus';
+var GMB = 'https://data.etagmb.gov.hk';
+
+var labels = {};
+var gmbRoutes = {};
+
+function getJson(url) {
+  return fetch(url, { cache: 'no-store' }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+
+function resolveLabels() {
+  var jobs = CONFIG.stops.map(function (s) {
+    var key = s.operator + '|' + s.id;
+    if (s.label) { labels[key] = s.label; return Promise.resolve(); }
+    var base = s.operator === 'kmb' ? KMB : s.operator === 'ctb' ? CTB : null;
+    if (!base) { labels[key] = '站 ' + s.id; return Promise.resolve(); }
+    return getJson(base + '/stop/' + s.id).then(function (j) {
+      labels[key] = (j.data && j.data.name_tc) || String(s.id);
+    }).catch(function () { labels[key] = String(s.id); });
+  });
+  return Promise.all(jobs);
+}
+
+function gmbRouteInfo(routeId) {
+  if (gmbRoutes[routeId]) return Promise.resolve(gmbRoutes[routeId]);
+  return getJson(GMB + '/route/' + routeId).then(function (j) {
+    var info = { code: '', dests: {} };
+    var v = (j.data || [])[0];
+    if (v) {
+      info.code = v.route_code || '';
+      (v.directions || []).forEach(function (d) { info.dests[d.route_seq] = d.dest_tc || ''; });
+    }
+    gmbRoutes[routeId] = info;
+    return info;
+  }).catch(function () { return { code: String(routeId), dests: {} }; });
+}
+
+function fetchStop(s) {
+  if (s.operator === 'kmb') {
+    return getJson(KMB + '/stop-eta/' + s.id).then(function (j) {
+      return (j.data || []).map(function (r) {
+        return { op: 'kmb', route: r.route, dir: r.dir || '', dest: r.dest_tc || '', eta: r.eta, rmk: r.rmk_tc || '' };
+      });
+    });
+  }
+  if (s.operator === 'ctb') {
+    return Promise.all((s.routes || []).map(function (rt) {
+      return getJson(CTB + '/eta/CTB/' + s.id + '/' + rt).then(function (j) { return j.data || []; }).catch(function () { return []; });
+    })).then(function (lists) {
+      var out = [];
+      lists.forEach(function (list) {
+        list.forEach(function (r) {
+          out.push({ op: 'ctb', route: r.route, dir: r.dir || '', dest: r.dest_tc || '', eta: r.eta, rmk: r.rmk_tc || '' });
+        });
+      });
+      return out;
+    });
+  }
+  return getJson(GMB + '/eta/stop/' + s.id).then(function (j) {
+    var entries = j.data || [];
+    return Promise.all(entries.map(function (e) {
+      return gmbRouteInfo(e.route_id).then(function (info) {
+        return (e.eta || []).map(function (t) {
+          return { op: 'gmb', route: info.code, dir: String(e.route_seq), dest: info.dests[e.route_seq] || '', eta: t.timestamp, rmk: t.remarks_tc || '' };
+        });
+      });
+    })).then(function (lists) {
+      var out = [];
+      lists.forEach(function (l) { out = out.concat(l); });
+      return out;
+    });
+  });
+}
+
+function rowHtml(a) {
+  var minHtml;
+  if (a.minutes <= 0) minHtml = '<div class="min now">即將到達</div>';
+  else minHtml = '<span class="min' + (a.minutes <= 3 ? ' now' : '') + '">' + a.minutes + '</span><span class="unit">分鐘</span>';
+  return '<div class="row' + (a.minutes < 6 ? ' soon' : '') + '">' +
+    '<div class="pill ' + esc(a.op) + '">' + esc(a.route) + '</div>' +
+    '<div><div class="dest">' + esc(a.dest) + '</div>' +
+    '<div class="sub">' + esc(a.stopLabel) + (a.rmk ? '  ·  <span class="rmk">' + esc(a.rmk) + '</span>' : '') + '</div></div>' +
+    '<div class="when">' + minHtml + '<div class="at">' + esc(a.etaTime) + '</div></div></div>';
+}
+
+function refresh() {
+  var now = Date.now();
+  var filter = CONFIG.routeFilter.map(function (r) { return String(r).toUpperCase(); });
+  var exclude = (CONFIG.excludeRoutes || []).map(function (r) { return String(r).toUpperCase(); });
+  Promise.all(CONFIG.stops.map(function (s) {
+    return fetchStop(s).then(function (rows) {
+      var key = s.operator + '|' + s.id;
+      var wl = (s.routes || []).map(function (r) { return String(r).toUpperCase(); });
+      if (wl.length) rows = rows.filter(function (r) { return wl.indexOf(String(r.route).toUpperCase()) >= 0; });
+      return rows.map(function (r) { r.stopId = String(s.id); r.stopLabel = labels[key] || ''; r.wl = wl.length > 0; return r; });
+    }).catch(function () { return null; });
+  })).then(function (results) {
+    var failed = 0;
+    var arrivals = [];
+    results.forEach(function (rows) {
+      if (rows === null) { failed++; return; }
+      rows.forEach(function (r) {
+        if (!r.eta) return;
+        var t = new Date(r.eta).getTime();
+        if (isNaN(t)) return;
+        var m = Math.round((t - now) / 60000);
+        if (m < -1 || m > CONFIG.maxMinutesAhead) return;
+        if (filter.length && filter.indexOf(String(r.route).toUpperCase()) < 0) return;
+        if (!r.wl && exclude.indexOf(String(r.route).toUpperCase()) >= 0) return;
+        var d = new Date(t);
+        arrivals.push({ op: r.op, route: r.route, dir: r.dir, dest: r.dest, rmk: r.rmk,
+          stopId: r.stopId, stopLabel: r.stopLabel, minutes: Math.max(m, 0),
+          etaTime: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) });
+      });
+    });
+    arrivals.sort(function (a, b) { return a.minutes - b.minutes; });
+    var seen = {}; var exact = {}; var board = [];
+    arrivals.forEach(function (a) {
+      var k = a.op + '|' + a.stopId + '|' + a.route + '|' + a.dir;
+      var ek = k + '|' + a.etaTime;
+      if (exact[ek]) return;
+      exact[ek] = 1;
+      seen[k] = (seen[k] || 0) + 1;
+      if (seen[k] <= CONFIG.maxPerRoute) board.push(a);
+    });
+    var rowsEl = document.getElementById('rows');
+    document.getElementById('stale').style.display = (failed >= CONFIG.stops.length) ? 'inline' : 'none';
+    if (board.length === 0) {
+      rowsEl.innerHTML = '<div class="empty">暫時沒有班次<br><small>夜晚收車後屬正常</small></div>';
+    } else {
+      var html = '';
+      for (var i = 0; i < Math.min(board.length, CONFIG.maxRows); i++) html += rowHtml(board[i]);
+      rowsEl.innerHTML = html;
+    }
+    var n = new Date();
+    document.getElementById('updated').textContent = '更新於 ' +
+      ('0' + n.getHours()).slice(-2) + ':' + ('0' + n.getMinutes()).slice(-2) + ':' + ('0' + n.getSeconds()).slice(-2);
+  }).catch(function () {
+    document.getElementById('stale').style.display = 'inline';
+  }).then(function () {
+    setTimeout(refresh, CONFIG.refreshSeconds * 1000);
+  });
+}
+
+document.getElementById('title').textContent = CONFIG.title;
+document.title = CONFIG.title;
+setInterval(function () {
+  var d = new Date();
+  document.getElementById('clock').textContent =
+    ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+}, 1000);
+
+resolveLabels().then(refresh);
+</script>
+<div id="night" style="position:fixed; top:0; left:0; right:0; bottom:0; background:#000; display:none; z-index:9;"></div>
+<script>
+(function () {
+  var startT = (typeof CONFIG !== 'undefined' && CONFIG.nightStart) || '23:00';
+  var endT = (typeof CONFIG !== 'undefined' && CONFIG.nightEnd) || '06:30';
+  var peekUntil = 0;
+  function toMin(s) { var p = s.split(":"); return (+p[0]) * 60 + (+p[1]); }
+  function nightActive(nowMin) {
+    var a = toMin(startT), b = toMin(endT);
+    if (a === b) return false;
+    if (a < b) return nowMin >= a && nowMin < b;
+    return nowMin >= a || nowMin < b;
+  }
+  window.__nightActive = nightActive;
+  var el = document.getElementById("night");
+  el.addEventListener("click", function () { peekUntil = Date.now() + 20000; el.style.display = "none"; });
+  function check() {
+    var d = new Date();
+    var on = nightActive(d.getHours() * 60 + d.getMinutes()) && Date.now() > peekUntil;
+    el.style.display = on ? "block" : "none";
+  }
+  setInterval(check, 15000); check();
+})();
+</script>
+</body>
+</html>
