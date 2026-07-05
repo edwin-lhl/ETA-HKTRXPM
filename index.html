@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>巴士到站</title>
+<style>
+  html { zoom: 1.08; }
+  :root {
+    --bg: #000; --card: rgba(28,28,30,0.82); --separator: rgba(84,84,88,0.34);
+    --label: #fff; --secondary: rgba(235,235,245,0.6); --tertiary: rgba(235,235,245,0.3);
+    --red: #ff453a; --yellow: #ffd60a; --green: #30d158;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--label);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro TC", "PingFang HK", sans-serif;
+    display: flex; flex-direction: column; padding: 1.4vh 4vw 0.7vh; overflow: hidden;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 0 0.4vw 0.9vh; }
+  .wx-grp { display: flex; align-items: center; gap: 1em; white-space: nowrap; }
+  #wx-warn { min-width: 8.1em; display: inline-flex; gap: 0.45em; align-items: center; justify-content: flex-end; }
+  h1 { font-size: clamp(27px, 4.8vw, 47px); font-weight: 600; letter-spacing: -0.022em; }
+  .hdr-right { display: flex; align-items: baseline; gap: 1.4vw; }
+  .date { font-size: clamp(23px, 3.4vw, 37px); font-weight: 500; color: var(--secondary); font-family: ui-rounded, -apple-system, sans-serif; font-variant-numeric: tabular-nums; }
+  .clock { min-width: 4.7em; text-align: right; font-feature-settings: 'tnum'; font-size: clamp(33px, 5.8vw, 57px); font-weight: 600; font-family: ui-rounded, -apple-system, 'PingFang HK', sans-serif; font-variant-numeric: tabular-nums; color: #ffffff; }
+  .card { flex: none; display: flex; flex-direction: column; overflow: hidden; background: var(--card);
+    -webkit-backdrop-filter: blur(30px); backdrop-filter: blur(30px); border-radius: 22px; padding: 0.4vh 0; }
+  .row { display: grid; grid-template-columns: 7.4em 12.6em 1fr auto; gap: 1.2vw; align-items: center; padding: 0.5vh 3.6vw; position: relative; }
+  .vic { width: 12.03em; margin: 0 auto; transform: translateX(4.48em); display: flex; align-items: center; }
+  .vic + div { padding-left: 7.4em; }
+  .vic svg, .vic img { width: 100%; height: auto; display: block; }
+  .row + .row::before { content: ""; position: absolute; top: 0; left: 4.2vw; right: 0; height: 0.5px; background: var(--separator); }
+  .row.soon { background: #e5e5ea; }
+  .row.soon .dest { color: #1c1c1e; }
+  .row.soon .sub { color: rgba(60,60,67,0.72); }
+  .row.soon .at { color: rgba(60,60,67,0.5); }
+  .row.soon .unit { color: rgba(60,60,67,0.72); }
+  .row.soon .min { color: #1c1c1e; }
+  .row.soon .min.now { color: #1d7a35; }
+  .row.soon .min.arriving { color: #1d7a35; }
+  .row.soon .rmk { color: #a05a00; }
+  .pill { justify-self: start; font-size: clamp(22px, 3.6vw, 39px); font-weight: 700; padding: 0.14em 0.5em;
+    border-radius: 0.42em; min-width: 2.5em; text-align: center; font-variant-numeric: tabular-nums; }
+  .pill.kmb { background: var(--red); color: #fff; }
+  .pill.ctb { background: var(--yellow); color: #1c1400; }
+  .pill.gmb { background: var(--green); color: #003217; }
+  .pill.shuttle { background: #0a84ff; color: #fff; }
+  .mkt { color: #ff453a; }
+  .shuttle-head { font-size: clamp(12px, 1.7vw, 17px); font-weight: 600; color: var(--secondary); padding: 1vh 4.2vw 0.2vh; }
+  #card2, #cardA43 { flex: none; margin-top: 0.4vh; }
+  #cardA43 { background: rgba(10, 132, 255, 0.28); border: 1.5px solid rgba(10, 132, 255, 0.65); }
+  #cardA43 .dest::before { content: "✈ "; color: #7cc0ff; font-size: 1.25em; }
+  .dest { font-size: clamp(24px, 3.9vw, 42.5px); font-weight: 600; letter-spacing: -0.016em; line-height: 1.28; }
+  .sub { font-size: clamp(14px, 1.9vw, 20px); color: var(--secondary); margin-top: 0.2em; }
+  .rmk { color: #ff9f0a; }
+  .when { text-align: right; white-space: nowrap; }
+  .min { font-size: clamp(27px, 4.8vw, 51px); font-weight: 700; font-family: ui-rounded, -apple-system, 'PingFang HK', sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .min.now { color: var(--green); }
+  .min.arriving { color: var(--green); font-size: clamp(20px, 3vw, 33px); }
+  .unit { font-size: clamp(14px, 2vw, 21px); font-weight: 400; color: var(--secondary); margin-left: 0.3em; }
+  .at { font-size: clamp(14px, 1.9vw, 20px); color: var(--tertiary); margin-top: 0.15em; font-variant-numeric: tabular-nums; }
+  .wx { font-size: clamp(24px, 3.6vw, 40px); font-weight: 600; color: var(--secondary); font-family: ui-rounded, -apple-system, 'PingFang HK', sans-serif; font-variant-numeric: tabular-nums; }
+  @media (max-height: 1000px) { html { zoom: 0.97; } }
+  @media (max-height: 700px) { html { zoom: 0.70; } }
+  .empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--secondary); font-size: clamp(17px, 2.4vw, 25px); text-align: center; line-height: 1.9; }
+  footer { margin-top: auto; display: flex; justify-content: space-between; align-items: center; padding: 0.8vh 0.6vw 0;
+    font-size: clamp(12px, 1.35vw, 16px); color: var(--tertiary); font-weight: 500; }
+  .dot { display: inline-block; width: 0.55em; height: 0.55em; border-radius: 50%; margin: 0 0.45em 0 1.1em; }
+  #stale { color: var(--red); display: none; font-weight: 600; }
+</style>
+</head>
+<body>
+<header><h1 id="title">巴士到站</h1><div class="wx-grp"><span id="wx-warn"></span><span id="wx" class="wx"></span></div><span id="date" class="date"></span><div class="clock" id="clock">--:--:--</div></header>
+<div class="card"><div id="rows" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"><div class="empty">載入中…</div></div></div>
+<div class="card" id="cardA43"><div id="a43rows"></div></div>
+<div class="card" id="card2"><div id="shuttlerows"></div></div>
+<footer>
+  <span id="updated"></span><span id="stale">未能更新</span>
+  <span><span class="dot" style="background:var(--red)"></span>九巴<span class="dot" style="background:var(--yellow)"></span>城巴<span class="dot" style="background:var(--green)"></span>專線小巴</span>
+</footer>
+<script>
+// ============ 設定（改呢度就得）============
+var CONFIG = {
+  title: '巴士到站系統',
+  refreshSeconds: 20,
+  maxMinutesAhead: 60,
+  maxPerRoute: 2,
+  maxRows: 4,
+  routeFilter: [],
+  weatherStation: '上水',
+  excludeRoutes: ['A43', '978'],
+  routeMax: { '502': 1 },
+  shuttle: {
+    name: '蔚翠花園居民巴士',
+    show: 2,
+    weekday: [
+      ['06:05',0],['06:20',0],['06:28',0],['06:36',0],['06:44',0],['06:52',0],['07:00',0],
+      ['07:08',0],['07:16',0],['07:24',0],['07:32',0],['07:40',0],['07:48',0],['07:56',0],
+      ['08:04',0],['08:12',0],['08:20',0],['08:28',0],['08:36',0],['08:44',0],['08:52',0],
+      ['09:00',1],['09:12',1],['09:24',1],['09:36',1],['09:48',1],['10:00',1],['10:15',1],
+      ['10:30',1],['10:45',1],['11:00',1],['11:15',1],['11:30',1],['11:45',0],['12:00',0],
+      ['12:15',0],['12:30',0],['12:45',0],['13:00',0],['13:15',0],['13:30',0],['13:50',0],
+      ['14:10',0],['14:30',0],['14:50',0],['15:10',0],['15:30',1],['15:45',1],['16:00',1],
+      ['16:15',1],['16:30',1],['16:45',1],['17:00',0],['17:10',0],['17:20',0],['17:30',0],
+      ['17:40',0],['17:50',0],['18:00',0],['18:10',0],['18:20',0],['18:30',0],['18:40',0],
+      ['18:50',0],['19:00',0],['19:10',0],['19:20',0],['19:30',0],['19:40',0],['19:50',0],
+      ['20:00',0],['20:10',0],['20:20',0],['20:30',0],['20:40',0],['20:50',0],['21:00',0],
+      ['21:15',0],['21:30',0],['21:45',0],['22:00',0],['22:15',0],['22:30',0],['22:45',0],
+      ['23:00',0],['23:15',0]
+    ],
+    holiday: [
+      ['06:30',0],['06:50',0],['07:10',0],['07:30',0],['07:50',0],['08:10',0],['08:30',0],
+      ['08:50',1],['09:10',1],['09:25',1],['09:40',1],['09:55',1],['10:10',1],['10:25',1],
+      ['10:40',1],['10:55',1],['11:10',1],['11:25',0],['11:40',0],['11:55',0],['12:16',0],
+      ['12:34',0],['12:52',0],['13:10',0],['13:28',0],['13:46',0],['14:04',0],['14:22',0],
+      ['14:40',0],['15:00',0],['15:20',1],['15:40',1],['16:00',1],['16:20',1],['16:48',1],
+      ['17:06',0],['17:24',0],['17:42',0],['18:00',0],['18:18',0],['18:36',0],['18:54',0],
+      ['19:12',0],['19:30',0],['19:48',0],['20:06',0],['20:24',0],['20:42',0],['21:00',0],
+      ['21:18',0],['21:36',0],['21:54',0],['22:12',0],['22:30',0]
+    ]
+  },
+  nightStart: '23:00',
+  nightEnd: '06:30',
+  stops: [
+    { operator: 'gmb', id: '20004169', label: '欣翠花園外' },
+    { operator: 'kmb', id: '98EBAB9468C80DD2', label: '欣翠花園（往市區）' },
+    { operator: 'kmb', id: 'CCDD774F50E8650C', label: '欣翠花園（高鐵巴士）' },
+    { operator: 'kmb', id: '9B0A34A1BF585BC4', label: '欣翠花園（往聯和墟）' },
+    { operator: 'kmb', id: 'D6ACD5E94F9E6DED', routes: ['A43'], sec: 'a43', label: '' },
+    { operator: 'ctb', id: '003379', routes: ['678'], label: '欣翠花園（城巴678）' }
+  ]
+};
+// ==========================================
+
+var KMB = 'https://data.etabus.gov.hk/v1/transport/kmb';
+var CTB = 'https://rt.data.gov.hk/v2/transport/citybus';
+var GMB = 'https://data.etagmb.gov.hk';
+
+var labels = {};
+var gmbRoutes = {};
+
+function getJson(url) {
+  return fetch(url, { cache: 'no-store' }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
+
+var VIC = {
+  kmb: '<img src="kmb.webp" alt="">',
+  ctb: '<img src="ctb.webp" alt="">',
+  lwb: '<img src="lwb.webp" alt="">',
+  gmb: '<img src="gmb.webp" alt="">',
+  shuttle: '<img src="shuttle.webp" alt="">'
+};
+function vic(op) { return '<div class="vic">' + (VIC[op] || VIC.kmb) + '</div>'; }
+window.__vic = vic;
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+
+function resolveLabels() {
+  var jobs = CONFIG.stops.map(function (s) {
+    var key = s.operator + '|' + s.id;
+    if (s.label) { labels[key] = s.label; return Promise.resolve(); }
+    var base = s.operator === 'kmb' ? KMB : s.operator === 'ctb' ? CTB : null;
+    if (!base) { labels[key] = '站 ' + s.id; return Promise.resolve(); }
+    return getJson(base + '/stop/' + s.id).then(function (j) {
+      labels[key] = (j.data && j.data.name_tc) || String(s.id);
+    }).catch(function () { labels[key] = String(s.id); });
+  });
+  return Promise.all(jobs);
+}
+
+function gmbRouteInfo(routeId) {
+  if (gmbRoutes[routeId]) return Promise.resolve(gmbRoutes[routeId]);
+  return getJson(GMB + '/route/' + routeId).then(function (j) {
+    var info = { code: '', dests: {} };
+    var v = (j.data || [])[0];
+    if (v) {
+      info.code = v.route_code || '';
+      (v.directions || []).forEach(function (d) { info.dests[d.route_seq] = d.dest_tc || ''; });
+    }
+    gmbRoutes[routeId] = info;
+    return info;
+  }).catch(function () { return { code: String(routeId), dests: {} }; });
+}
+
+function fetchStop(s) {
+  if (s.operator === 'kmb') {
+    return getJson(KMB + '/stop-eta/' + s.id).then(function (j) {
+      return (j.data || []).map(function (r) {
+        return { op: 'kmb', route: r.route, dir: r.dir || '', dest: r.dest_tc || '', eta: r.eta, rmk: r.rmk_tc || '' };
+      });
+    });
+  }
+  if (s.operator === 'ctb') {
+    return Promise.all((s.routes || []).map(function (rt) {
+      return getJson(CTB + '/eta/CTB/' + s.id + '/' + rt).then(function (j) { return j.data || []; }).catch(function () { return []; });
+    })).then(function (lists) {
+      var out = [];
+      lists.forEach(function (list) {
+        list.forEach(function (r) {
+          out.push({ op: 'ctb', route: r.route, dir: r.dir || '', dest: r.dest_tc || '', eta: r.eta, rmk: r.rmk_tc || '' });
+        });
+      });
+      return out;
+    });
+  }
+  return getJson(GMB + '/eta/stop/' + s.id).then(function (j) {
+    var entries = j.data || [];
+    return Promise.all(entries.map(function (e) {
+      return gmbRouteInfo(e.route_id).then(function (info) {
+        return (e.eta || []).map(function (t) {
+          return { op: 'gmb', route: info.code, dir: String(e.route_seq), dest: info.dests[e.route_seq] || '', eta: t.timestamp, rmk: t.remarks_tc || '' };
+        });
+      });
+    })).then(function (lists) {
+      var out = [];
+      lists.forEach(function (l) { out = out.concat(l); });
+      return out;
+    });
+  });
+}
+
+function rowHtml(a) {
+  var minHtml;
+  if (a.minutes <= 0) minHtml = '<div class="min arriving">即將到達</div>';
+  else minHtml = '<span class="min' + (a.minutes <= 3 ? ' now' : '') + '">' + a.minutes + '</span><span class="unit">分鐘</span>';
+  return '<div class="row' + (a.minutes < 6 ? ' soon' : '') + '">' +
+    '<div class="pill ' + esc(a.op) + '">' + esc(a.route) + '</div>' + vic(a.sec === 'a43' ? 'lwb' : a.op) +
+    '<div><div class="dest">' + esc(a.dest) + '</div>' +
+    (a.rmk ? '<div class="sub"><span class="rmk">' + esc(a.rmk) + '</span></div>' : '') + '</div>' +
+    '<div class="when">' + minHtml + '<div class="at">' + esc(a.etaTime) + '</div></div></div>';
+}
+
+function refresh() {
+  var now = Date.now();
+  var filter = CONFIG.routeFilter.map(function (r) { return String(r).toUpperCase(); });
+  var exclude = (CONFIG.excludeRoutes || []).map(function (r) { return String(r).toUpperCase(); });
+  Promise.all(CONFIG.stops.map(function (s) {
+    return fetchStop(s).then(function (rows) {
+      var key = s.operator + '|' + s.id;
+      var wl = (s.routes || []).map(function (r) { return String(r).toUpperCase(); });
+      if (wl.length) rows = rows.filter(function (r) { return wl.indexOf(String(r.route).toUpperCase()) >= 0; });
+      return rows.map(function (r) { r.stopId = String(s.id); r.stopLabel = labels[key] || ''; r.wl = wl.length > 0; r.sec = s.sec || ''; return r; });
+    }).catch(function () { return null; });
+  })).then(function (results) {
+    var failed = 0;
+    var arrivals = [];
+    results.forEach(function (rows) {
+      if (rows === null) { failed++; return; }
+      rows.forEach(function (r) {
+        if (!r.eta) return;
+        var t = new Date(r.eta).getTime();
+        if (isNaN(t)) return;
+        var m = Math.round((t - now) / 60000);
+        if (m < -1 || m > CONFIG.maxMinutesAhead) return;
+        if (filter.length && filter.indexOf(String(r.route).toUpperCase()) < 0) return;
+        if (!r.wl && exclude.indexOf(String(r.route).toUpperCase()) >= 0) return;
+        var d = new Date(t);
+        arrivals.push({ op: r.op, route: r.route, dir: r.dir, dest: r.dest, rmk: r.rmk,
+          stopId: r.stopId, stopLabel: r.stopLabel, sec: r.sec || '', minutes: Math.max(m, 0),
+          etaTime: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) });
+      });
+    });
+    arrivals.sort(function (a, b) { return a.minutes - b.minutes; });
+    var seen = {}; var exact = {}; var rc = {}; var board = [];
+    arrivals.forEach(function (a) {
+      var k = a.op + '|' + a.stopId + '|' + a.route + '|' + a.dir;
+      var ek = k + '|' + a.etaTime;
+      if (exact[ek]) return;
+      exact[ek] = 1;
+      var rkey = String(a.route);
+      var rmax = CONFIG.routeMax && CONFIG.routeMax[rkey];
+      if (rmax) { rc[rkey] = (rc[rkey] || 0) + 1; if (rc[rkey] > rmax) return; }
+      seen[k] = (seen[k] || 0) + 1;
+      if (seen[k] <= CONFIG.maxPerRoute) board.push(a);
+    });
+    var rowsEl = document.getElementById('rows');
+    var a43El = document.getElementById('a43rows');
+    var main = [], a43 = [];
+    board.forEach(function (a) { (a.sec === 'a43' ? a43 : main).push(a); });
+    main = main.filter(function (a) { return a.minutes >= 3; });
+    var top3 = main.slice(0, 3);
+    if (top3.length === 3 && top3.every(function (a) { return a.minutes <= 5; })) {
+      var later = main.filter(function (a) { return a.minutes >= 6; });
+      var picked = top3.slice(0, 2).concat(later.slice(0, 2));
+      if (picked.length < 4) {
+        var chosen = picked.slice();
+        main.forEach(function (a) { if (chosen.length < 4 && chosen.indexOf(a) < 0) chosen.push(a); });
+        picked = chosen;
+      }
+      main = picked;
+    }
+    document.getElementById('stale').style.display = (failed >= CONFIG.stops.length) ? 'inline' : 'none';
+    if (main.length === 0) {
+      rowsEl.innerHTML = '<div class="empty">暫時沒有班次<br><small>夜晚收車後屬正常</small></div>';
+    } else {
+      var html = '';
+      for (var i = 0; i < Math.min(main.length, CONFIG.maxRows); i++) html += rowHtml(main[i]);
+      rowsEl.innerHTML = html;
+    }
+    if (a43El) {
+      a43El.innerHTML = a43.length ? rowHtml(a43[0])
+        : '<div class="row"><div class="pill kmb">A43</div>' + vic('lwb') + '<div><div class="sub">暫無班次</div></div><div class="when"></div></div>';
+    }
+    var n = new Date();
+    document.getElementById('updated').textContent = '更新於 ' +
+      ('0' + n.getHours()).slice(-2) + ':' + ('0' + n.getMinutes()).slice(-2) + ':' + ('0' + n.getSeconds()).slice(-2);
+  }).catch(function () {
+    document.getElementById('stale').style.display = 'inline';
+  }).then(function () {
+    setTimeout(refresh, CONFIG.refreshSeconds * 1000);
+  });
+}
+
+document.getElementById('title').textContent = CONFIG.title;
+document.title = CONFIG.title;
+setInterval(function () {
+  var d = new Date();
+  document.getElementById('clock').textContent =
+    ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+  var de = document.getElementById('date');
+  if (de) {
+    var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    de.textContent = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth()+1)).slice(-2) + '/' + d.getFullYear() + ' (' + DAYS[d.getDay()] + ')';
+  }
+}, 1000);
+
+resolveLabels().then(refresh);
+</script>
+<div id="night" style="position:fixed; top:0; left:0; right:0; bottom:0; background:#000; display:none; z-index:9;"></div>
+<script>
+(function () {
+  var startT = (typeof CONFIG !== 'undefined' && CONFIG.nightStart) || '23:00';
+  var endT = (typeof CONFIG !== 'undefined' && CONFIG.nightEnd) || '06:30';
+  var peekUntil = 0;
+  function toMin(s) { var p = s.split(":"); return (+p[0]) * 60 + (+p[1]); }
+  function nightActive(nowMin) {
+    var a = toMin(startT), b = toMin(endT);
+    if (a === b) return false;
+    if (a < b) return nowMin >= a && nowMin < b;
+    return nowMin >= a || nowMin < b;
+  }
+  window.__nightActive = nightActive;
+  var el = document.getElementById("night");
+  el.addEventListener("click", function () { peekUntil = Date.now() + 20000; el.style.display = "none"; });
+  function check() {
+    var d = new Date();
+    var on = nightActive(d.getHours() * 60 + d.getMinutes()) && Date.now() > peekUntil;
+    el.style.display = on ? "block" : "none";
+  }
+  setInterval(check, 15000); check();
+})();
+</script>
+<script>
+(function () {
+  var cfg = (typeof CONFIG !== 'undefined') && CONFIG.shuttle;
+  var PH = {}; '20260101,20260217,20260218,20260219,20260403,20260404,20260406,20260407,20260501,20260525,20260619,20260701,20260926,20261001,20261019,20261225,20261226,20270101,20270206,20270208,20270209,20270326,20270327,20270329,20270405,20270501,20270513,20270609,20270701,20270916,20271001,20271008,20271225,20271227'.split(',').forEach(function(d){PH[d]=1}); // 內置2026-27官方假期，fetch成功會再覆蓋
+  function loadPH(){
+      var SRC='https://www.1823.gov.hk/common/ical/tc.json';
+      function absorb(d){try{var ev=d.vcalendar[0].vevent;for(var i=0;i<ev.length;i++){var s=ev[i].dtstart[0];if(s&&s.length>=8)PH[String(s).slice(0,8)]=1;}}catch(e){}}
+      // 第一層：直接攞 1823 官方日曆（將來如開放 CORS 即用）
+      fetch(SRC).then(function(r){return r.json()}).then(absorb).catch(function(){
+        // 第二層：data.gov.hk 歷史檔案 API（有 CORS *，政府自動存檔，永久自維護）
+        function ymd(t){var d=new Date(t);return ''+d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);}
+        var now=Date.now(), q='url='+encodeURIComponent(SRC);
+        fetch('https://api.data.gov.hk/v1/historical-archive/list-file-versions?'+q+'&start='+ymd(now-400*864e5)+'&end='+ymd(now-864e5))
+          .then(function(r){return r.json()})
+          .then(function(j){var ts=j.timestamps[j.timestamps.length-1];return fetch('https://api.data.gov.hk/v1/historical-archive/get-file?'+q+'&time='+ts);})
+          .then(function(r){return r.json()}).then(absorb).catch(function(){});
+        // 第三層：內置 2026-27 名單（上面 seed，離線都啱）
+      });
+    }
+    loadPH();
+    setInterval(loadPH, 6*3600*1000); // 每6小時再攞，長開免重載都追到新一年假期
+    window.__phCount=function(){return Object.keys(PH).length};
+  function tableFor(dayOffset) {
+    var d = new Date(Date.now() + dayOffset * 86400000);
+    var key = '' + d.getFullYear() + ('0'+(d.getMonth()+1)).slice(-2) + ('0'+d.getDate()).slice(-2);
+    var wd = d.getDay();
+    return (wd === 0 || wd === 6 || PH[key]) ? cfg.holiday : cfg.weekday;
+  }
+  window.__shuttleTableFor = tableFor;
+  var rowsEl = document.getElementById('shuttlerows');
+  if (!cfg || !rowsEl) return;
+  function nextDeps(nowMin) {
+    var out = [];
+    var T = tableFor(0);
+    for (var i = 0; i < T.length; i++) {
+      var p = T[i][0].split(':');
+      var m = (+p[0]) * 60 + (+p[1]);
+      if (m >= nowMin) out.push({ t: T[i][0], mkt: T[i][1] === 1, mins: m - nowMin });
+      if (out.length >= (cfg.show || 2)) break;
+    }
+    return out;
+  }
+  window.__shuttleNext = nextDeps;
+  function render() {
+    var d = new Date();
+    var deps = nextDeps(d.getHours() * 60 + d.getMinutes());
+    var html = '';
+    if (deps.length === 0) {
+      html = '<div class="row"><div class="pill shuttle">邨巴</div>' +
+        '<div><div class="dest">今日服務已完</div><div class="sub">明早頭班 ' + tableFor(1)[0][0] + '</div></div>' +
+        '<div class="when"></div></div>';
+    } else {
+      for (var i = 0; i < deps.length; i++) {
+        var a = deps[i];
+        var when;
+        if (a.mins <= 0) when = '<div class="min arriving">即將開出</div>';
+        else when = '<span class="min' + (a.mins <= 3 ? ' now' : '') + '">' + a.mins + '</span><span class="unit">分鐘</span>';
+        html += '<div class="row' + (a.mins < 6 ? ' soon' : '') + '">' +
+          '<div class="pill shuttle">邨巴</div>' + window.__vic('shuttle') +
+          '<div><div class="dest">上水火車站' + (a.mkt ? '&nbsp;&nbsp;<span class="mkt" style="font-size:0.62em; vertical-align:0.18em;">●</span> <span style="font-size:0.6em; font-weight:400; color:var(--secondary);">經街市</span>' : '') + '</div></div>' +
+          '<div class="when">' + when + '<div class="at">' + a.t + ' 開出</div></div></div>';
+      }
+    }
+    rowsEl.innerHTML = html;
+  }
+  setInterval(render, 20000);
+  render();
+})();
+</script>
+<script>
+(function () {
+  var st = (typeof CONFIG !== 'undefined' && CONFIG.weatherStation) || '上水';
+  function esc2(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function wx() {
+    fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+      var t=null;
+      try{var arr=d.temperature.data;for(var i=0;i<arr.length;i++){if(arr[i].place===st){t=arr[i].value;break;}}if(t===null&&arr.length)t=arr[0].value;}catch(e){}
+      var h=null; try{h=d.humidity.data[0].value;}catch(e){}
+      var el=document.getElementById('wx');
+      if(el&&(t!==null||h!==null)) el.textContent=(t!==null?t+'°':'')+(h!==null?' '+h+'%':'');
+    }).catch(function(){});
+    fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc',{cache:'no-store'}).then(function(r){return r.json()}).then(function(w){
+      var el=document.getElementById('wx-warn'); if(!el) return;
+      var HKO='https://www.hko.gov.hk/tc/wxinfo/dailywx/images/';
+      var MAP={WTS:'ts.gif',WRAINA:'raina.gif',WRAINR:'rainr.gif',WRAINB:'rainb.gif',
+        TC1:'tc1.gif',TC3:'tc3.gif',TC8NE:'tc8ne.gif',TC8SE:'tc8se.gif',TC8NW:'tc8nw.gif',TC8SW:'tc8sw.gif',TC9:'tc9.gif',TC10:'tc10.gif',
+        WMSGNL:'sms.gif',WFIREY:'firey.gif',WFIRER:'firer.gif',WFROST:'frost.gif',WHOT:'vhot.gif',WL:'landslip.gif',WFNTSA:'ntfl.gif'};
+      var out=[];
+      for(var k in w){
+        var it=w[k]; if(!it||!it.code) continue;
+        if(it.actionCode==='CANCEL') continue;
+        var g=MAP[it.code];
+        if(g) out.push('<img src="'+HKO+g+'" alt="'+esc2(it.name||it.code)+'" style="height:2.36em;width:auto;display:block;border-radius:0.32em;">');
+      }
+      el.innerHTML=out.join('');
+      el.style.display='inline-flex'; el.style.gap='0.45em'; el.style.alignItems='center';
+    }).catch(function(){});
+  }
+  setInterval(wx, 300000);
+  wx();
+})();
+</script>
+</body>
+</html>
