@@ -104,7 +104,7 @@ var CONFIG = {
   maxRows: 4,
   routeFilter: [],
   weatherStation: '上水',
-  excludeRoutes: ['A43', '978'],
+  excludeRoutes: ['A43', 'NA43', '978'],
   routeMax: { '502': 1 },
   shuttle: {
     name: '蔚翠花園居民巴士',
@@ -142,7 +142,7 @@ var CONFIG = {
     { operator: 'kmb', id: '98EBAB9468C80DD2', label: '欣翠花園（往市區）' },
     { operator: 'kmb', id: 'CCDD774F50E8650C', label: '欣翠花園（高鐵巴士）' },
     { operator: 'kmb', id: '9B0A34A1BF585BC4', label: '欣翠花園（往聯和墟）' },
-    { operator: 'kmb', id: 'D6ACD5E94F9E6DED', routes: ['A43'], sec: 'a43', label: '' },
+    { operator: 'kmb', id: 'D6ACD5E94F9E6DED', routes: ['A43', 'NA43'], sec: 'a43', label: '' },
     { operator: 'ctb', id: '003379', routes: ['678'], label: '欣翠花園（城巴678）' }
   ]
 };
@@ -303,6 +303,10 @@ function refresh() {
         if (m < -1 || m > CONFIG.maxMinutesAhead) return;
         if (filter.length && filter.indexOf(String(r.route).toUpperCase()) < 0) return;
         if (!r.wl && exclude.indexOf(String(r.route).toUpperCase()) >= 0) return;
+        if (r.sec === 'a43') { // A43/NA43 只顯示往機場方向（NA43 終點=港珠澳大橋香港口岸）
+          var dd = String(r.dest || '');
+          if (dd.indexOf('機場') < 0 && dd.indexOf('口岸') < 0) return;
+        }
         var d = new Date(t);
         arrivals.push({ op: r.op, route: r.route, dir: r.dir, dest: r.dest, rmk: r.rmk,
           stopId: r.stopId, stopLabel: r.stopLabel, sec: r.sec || '', minutes: Math.max(m, 0),
@@ -376,9 +380,9 @@ resolveLabels().then(refresh);
 <div id="night" style="position:fixed; top:0; left:0; right:0; bottom:0; background:#000; display:none; z-index:9;"></div>
 <script>
 (function () {
-  var startT = (typeof CONFIG !== 'undefined' && CONFIG.nightStart) || '23:00';
-  var endT = (typeof CONFIG !== 'undefined' && CONFIG.nightEnd) || '06:30';
-  var peekUntil = 0;
+  // 夜間熄屏：純時間控制（顯示/隱藏黑層）。摸屏喚醒由下面 5 分鐘 peek 腳本用 visibility 處理，兩者互不干涉。
+  var startT = (typeof CONFIG !== 'undefined' && CONFIG.nightStart) || '22:00';
+  var endT = (typeof CONFIG !== 'undefined' && CONFIG.nightEnd) || '06:00';
   function toMin(s) { var p = s.split(":"); return (+p[0]) * 60 + (+p[1]); }
   function nightActive(nowMin) {
     var a = toMin(startT), b = toMin(endT);
@@ -388,11 +392,9 @@ resolveLabels().then(refresh);
   }
   window.__nightActive = nightActive;
   var el = document.getElementById("night");
-  el.addEventListener("click", function () { peekUntil = Date.now() + 20000; el.style.display = "none"; });
   function check() {
     var d = new Date();
-    var on = nightActive(d.getHours() * 60 + d.getMinutes()) && Date.now() > peekUntil;
-    el.style.display = on ? "block" : "none";
+    el.style.display = nightActive(d.getHours() * 60 + d.getMinutes()) ? "block" : "none";
   }
   setInterval(check, 15000); check();
 })();
@@ -400,24 +402,23 @@ resolveLabels().then(refresh);
 <script>
 (function () {
   var cfg = (typeof CONFIG !== 'undefined') && CONFIG.shuttle;
-  var PH = {}; '20260101,20260217,20260218,20260219,20260403,20260404,20260406,20260407,20260501,20260525,20260619,20260701,20260926,20261001,20261019,20261225,20261226,20270101,20270206,20270208,20270209,20270326,20270327,20270329,20270405,20270501,20270513,20270609,20270701,20270916,20271001,20271008,20271225,20271227'.split(',').forEach(function(d){PH[d]=1}); // 內置2026-27官方假期，fetch成功會再覆蓋
+  // 冷啟動後備名單（2026–27）；一旦 fetch 成功即被官方數據覆蓋，唔使人手維護
+  var PH = {}; '20260101,20260217,20260218,20260219,20260403,20260404,20260406,20260407,20260501,20260525,20260619,20260701,20260926,20261001,20261019,20261225,20261226,20270101,20270206,20270208,20270209,20270326,20270327,20270329,20270405,20270501,20270513,20270609,20270701,20270916,20271001,20271008,20271225,20271227'.split(',').forEach(function(d){PH[d]=1});
   function loadPH(){
       var SRC='https://www.1823.gov.hk/common/ical/tc.json';
+      var Q='url='+encodeURIComponent(SRC);
       function absorb(d){try{var ev=d.vcalendar[0].vevent;for(var i=0;i<ev.length;i++){var s=ev[i].dtstart[0];if(s&&s.length>=8)PH[String(s).slice(0,8)]=1;}}catch(e){}}
-      // 第一層：直接攞 1823 官方日曆（將來如開放 CORS 即用）
-      fetch(SRC).then(function(r){return r.json()}).then(absorb).catch(function(){
-        // 第二層：data.gov.hk 歷史檔案 API（有 CORS *，政府自動存檔，永久自維護）
-        function ymd(t){var d=new Date(t);return ''+d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);}
-        var now=Date.now(), q='url='+encodeURIComponent(SRC);
-        fetch('https://api.data.gov.hk/v1/historical-archive/list-file-versions?'+q+'&start='+ymd(now-400*864e5)+'&end='+ymd(now-864e5))
-          .then(function(r){return r.json()})
-          .then(function(j){var ts=j.timestamps[j.timestamps.length-1];return fetch('https://api.data.gov.hk/v1/historical-archive/get-file?'+q+'&time='+ts);})
-          .then(function(r){return r.json()}).then(absorb).catch(function(){});
-        // 第三層：內置 2026-27 名單（上面 seed，離線都啱）
-      });
+      function ymd(t){var d=new Date(t);return ''+d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);}
+      // 主來源：data.gov.hk 官方歷史存檔 API（Access-Control-Allow-Origin: *，政府每年自動加入新一年假期 → 真正免維護）
+      var now=Date.now();
+      fetch('https://api.data.gov.hk/v1/historical-archive/list-file-versions?'+Q+'&start='+ymd(now-400*864e5)+'&end='+ymd(now))
+        .then(function(r){return r.json()})
+        .then(function(j){var ts=j.timestamps[j.timestamps.length-1];return fetch('https://api.data.gov.hk/v1/historical-archive/get-file?'+Q+'&time='+ts);})
+        .then(function(r){return r.json()}).then(absorb)
+        .catch(function(){ /* 後備：1823 直連（日後若開放 CORS 即可用） */ fetch(SRC).then(function(r){return r.json()}).then(absorb).catch(function(){}); });
     }
     loadPH();
-    setInterval(loadPH, 6*3600*1000); // 每6小時再攞，長開免重載都追到新一年假期
+    setInterval(loadPH, 6*3600*1000); // 每6小時再攞，長開就自動追到新一年假期
     window.__phCount=function(){return Object.keys(PH).length};
   function tableFor(dayOffset) {
     var d = new Date(Date.now() + dayOffset * 86400000);
